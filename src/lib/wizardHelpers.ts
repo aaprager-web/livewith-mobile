@@ -65,5 +65,6 @@ export function fieldSummary(field: StepField, data: WizardData): string {
       ? `${formatRangeEndpoint(field, v.min, 'min')} - ${formatRangeEndpoint(field, v.max, 'max')}`
       : 'Not answered yet';
   }
+  if (field.type === 'photo') return val ? 'Photo added' : 'Not answered yet';
   return val || 'Not answered yet';
 }

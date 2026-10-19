@@ -36,7 +36,14 @@
       "expo-font",
       "expo-image",
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "LiveWith needs access to your photos so you can add one to your profile.",
+          "cameraPermission": "LiveWith needs access to your camera so you can take a profile photo."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

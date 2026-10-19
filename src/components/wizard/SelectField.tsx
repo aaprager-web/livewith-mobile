@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput } from 'react-native';
 import { Brand } from '@/constants/brand';
 
 // A plain Modal + searchable list stands in for a native <select>, so this
@@ -28,34 +28,40 @@ export function SelectField({
         <Text style={value ? styles.valueText : styles.placeholderText}>{value || placeholder}</Text>
       </Pressable>
       <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
-            <TextInput
-              autoFocus
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search..."
-              style={styles.search}
-            />
-            <FlatList
-              data={filtered}
-              keyExtractor={(item) => item}
-              style={{ maxHeight: 360 }}
-              renderItem={({ item }) => (
-                <Pressable
-                  style={styles.row}
-                  onPress={() => {
-                    onChange(item);
-                    setQuery('');
-                    setOpen(false);
-                  }}
-                >
-                  <Text style={[styles.rowText, item === value && styles.rowTextSelected]}>{item}</Text>
-                </Pressable>
-              )}
-            />
+        <KeyboardAvoidingView
+          style={styles.backdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <Pressable style={styles.backdropTouchable} onPress={() => setOpen(false)}>
+            <Pressable style={styles.sheet} onPress={() => {}}>
+              <TextInput
+                autoFocus
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search..."
+                style={styles.search}
+              />
+              <FlatList
+                data={filtered}
+                keyExtractor={(item) => item}
+                keyboardShouldPersistTaps="handled"
+                style={{ maxHeight: 300 }}
+                renderItem={({ item }) => (
+                  <Pressable
+                    style={styles.row}
+                    onPress={() => {
+                      onChange(item);
+                      setQuery('');
+                      setOpen(false);
+                    }}
+                  >
+                    <Text style={[styles.rowText, item === value && styles.rowTextSelected]}>{item}</Text>
+                  </Pressable>
+                )}
+              />
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );
@@ -72,6 +78,9 @@ const styles = StyleSheet.create({
   valueText: { fontSize: 15, color: Brand.text },
   placeholderText: { fontSize: 15, color: Brand.textMuted },
   backdrop: {
+    flex: 1,
+  },
+  backdropTouchable: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'flex-end',

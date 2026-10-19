@@ -1,9 +1,12 @@
-// Onboarding step definitions, ported directly from the clickable
-// prototype (landed_prototype.html — AP_STEPS / FAM_STEPS), including the
-// au pair "Languages" step's per-language proficiency levels. Keeping the
-// exact same keys, labels and options here means the real app asks
-// families and au pairs the same questions, in the same order, that
-// people already clicked through in the prototype.
+// Onboarding step definitions, ported from the website's wizardSteps.ts
+// (itself ported from the clickable prototype's AP_STEPS / FAM_STEPS).
+// Field keys are kept identical to the website's so profile_data means the
+// same thing in both apps — but the *steps themselves are grouped
+// differently* here: the website's one-or-two-fields-per-page layout left
+// a lot of empty space on a phone screen, so related questions are
+// combined onto one scrollable page instead. This is a deliberate mobile-
+// specific divergence; keep it in mind if these two files are ever
+// reconciled.
 
 export type FieldType =
   | 'text'
@@ -15,7 +18,8 @@ export type FieldType =
   | 'strength'
   | 'languageLevels'
   | 'childList'
-  | 'range';
+  | 'range'
+  | 'photo';
 
 export interface StrengthItem {
   key: string;
@@ -151,23 +155,17 @@ export const AP_STEPS: Step[] = [
         dateMax: 'today',
         required: true,
       },
-    ],
-  },
-  {
-    title: 'Where are you now?',
-    sub: 'This helps families understand your journey.',
-    fields: [
-      { key: 'homeCountry', label: 'Country', type: 'text', placeholder: 'e.g. Italy' },
+      { key: 'homeCountry', label: 'Country you live in now', type: 'text', placeholder: 'e.g. Italy' },
       { key: 'homeCity', label: 'City', type: 'text', placeholder: 'e.g. Milan' },
     ],
   },
   {
-    title: 'Where do you want to au pair?',
-    sub: 'LiveWith is currently focused on London. Select all that apply.',
+    title: 'Where & when',
+    sub: 'LiveWith is currently focused on London.',
     fields: [
       {
         key: 'destination',
-        label: 'Destination',
+        label: 'Destination (select all that apply)',
         type: 'chipMulti',
         options: [
           'Central London',
@@ -180,15 +178,9 @@ export const AP_STEPS: Step[] = [
           'Not sure yet',
         ],
       },
-    ],
-  },
-  {
-    title: 'Right to work',
-    sub: 'This affects which families you can be matched with.',
-    fields: [
       {
         key: 'visa',
-        label: 'Which applies to you?',
+        label: 'Right to work: which applies to you?',
         type: 'chipSingle',
         options: [
           'UK/Irish citizen',
@@ -200,11 +192,6 @@ export const AP_STEPS: Step[] = [
           'N/A',
         ],
       },
-    ],
-  },
-  {
-    title: 'When can you start?',
-    fields: [
       {
         key: 'earliestStart',
         label: 'Earliest start date',
@@ -212,12 +199,6 @@ export const AP_STEPS: Step[] = [
         dateMin: 'today',
         required: true,
       },
-    ],
-  },
-  {
-    title: 'How long are you looking to stay?',
-    sub: 'Drag to set the range of months you’re looking to stay.',
-    fields: [
       {
         key: 'duration',
         label: 'Length of stay',
@@ -235,14 +216,7 @@ export const AP_STEPS: Step[] = [
   {
     title: 'Add a photo',
     sub: 'Profiles with a clear, friendly photo get far more responses.',
-    fields: [
-      {
-        key: 'photo',
-        label: 'Photo',
-        type: 'chipSingle',
-        options: ['Use suggested profile photo', "I'll add this later"],
-      },
-    ],
+    fields: [{ key: 'photo', label: 'Photo', type: 'photo' }],
   },
   {
     title: 'Languages',
@@ -268,7 +242,7 @@ export const AP_STEPS: Step[] = [
   },
   {
     title: 'Childcare experience',
-    sub: 'Select all that apply.',
+    sub: 'Select all that apply, and how comfortable you are with each age group.',
     fields: [
       {
         key: 'experience',
@@ -283,15 +257,9 @@ export const AP_STEPS: Step[] = [
           'Looking after younger siblings',
         ],
       },
-    ],
-  },
-  {
-    title: "Ages you're comfortable with",
-    sub: 'Be honest — this keeps matches relevant.',
-    fields: [
       {
         key: 'ageComfort',
-        label: '',
+        label: "Ages you're comfortable with",
         type: 'strength',
         items: [
           { key: '0-1', label: 'Newborns (0–1)' },
@@ -305,7 +273,7 @@ export const AP_STEPS: Step[] = [
     ],
   },
   {
-    title: 'Driving',
+    title: 'Driving & smoking',
     fields: [
       {
         key: 'driving',
@@ -313,11 +281,6 @@ export const AP_STEPS: Step[] = [
         type: 'chipSingle',
         options: ['Full licence', 'Learning / provisional', 'No licence'],
       },
-    ],
-  },
-  {
-    title: 'Smoking',
-    fields: [
       {
         key: 'smoking',
         label: 'Smoking',
@@ -327,8 +290,8 @@ export const AP_STEPS: Step[] = [
     ],
   },
   {
-    title: 'Working preferences',
-    sub: 'Drag to set the range of hours per week you want to work.',
+    title: 'Work & pay',
+    sub: 'Drag to set your preferred ranges.',
     fields: [
       {
         key: 'hours',
@@ -350,12 +313,6 @@ export const AP_STEPS: Step[] = [
           'Prefer evenings & weekends free',
         ],
       },
-    ],
-  },
-  {
-    title: 'Pay expectations',
-    sub: 'Drag to set the range of weekly pay you’re looking for.',
-    fields: [
       {
         key: 'payExpectation',
         label: 'Weekly pay',
@@ -415,11 +372,6 @@ export const FAM_STEPS: Step[] = [
         type: 'chipSingle',
         options: ['Two parents', 'One parent', 'Blended family', 'Grandparent living with us too', 'Other'],
       },
-    ],
-  },
-  {
-    title: 'Location',
-    fields: [
       { key: 'area', label: 'Area / borough', type: 'text', placeholder: 'e.g. Hendon, North London' },
       { key: 'station', label: 'Nearest station (optional)', type: 'text', placeholder: 'e.g. Hendon Central' },
     ],
@@ -432,12 +384,7 @@ export const FAM_STEPS: Step[] = [
   {
     title: 'Photo & privacy',
     fields: [
-      {
-        key: 'photo',
-        label: 'Photo',
-        type: 'chipSingle',
-        options: ['Use suggested family photo', "I'll add this later"],
-      },
+      { key: 'photo', label: 'Photo', type: 'photo' },
       {
         key: 'faceBlur',
         label: "Blur children's faces on public profile photos?",
@@ -447,7 +394,8 @@ export const FAM_STEPS: Step[] = [
     ],
   },
   {
-    title: 'Placement type',
+    title: 'Placement details',
+    sub: 'The practical details of the placement.',
     fields: [
       {
         key: 'placementType',
@@ -455,23 +403,12 @@ export const FAM_STEPS: Step[] = [
         type: 'chipSingle',
         options: ['Live-in', 'Live-out', 'Either works'],
       },
-    ],
-  },
-  {
-    title: 'When do you need someone to start?',
-    fields: [
       {
         key: 'startWindow',
-        label: '',
+        label: 'When do you need someone to start?',
         type: 'chipSingle',
         options: ['ASAP', 'Within 3 months', '3–6 months', 'Flexible / no fixed date'],
       },
-    ],
-  },
-  {
-    title: 'How long is the placement?',
-    sub: 'Drag to set the range of months you need someone for.',
-    fields: [
       {
         key: 'duration',
         label: 'Length of placement',
@@ -483,14 +420,9 @@ export const FAM_STEPS: Step[] = [
         underMinLabel: 'Under 1 month',
         overMaxLabel: '24m+',
       },
-    ],
-  },
-  {
-    title: 'Right to work',
-    fields: [
       {
         key: 'visaReq',
-        label: 'Requirement',
+        label: 'Right to work requirement',
         type: 'chipSingle',
         options: [
           'Must already have the right to work in the UK',
@@ -515,26 +447,21 @@ export const FAM_STEPS: Step[] = [
         unitSuffix: ' hrs/week',
         overMaxLabel: '50+ hrs/week',
       },
-    ],
-  },
-  {
-    title: 'Weekly pattern',
-    sub: 'When do you need the most help?',
-    fields: [
       {
         key: 'pattern',
-        label: 'Typical pattern',
+        label: 'When do you need the most help?',
         type: 'chipMulti',
         options: ['Early mornings', 'School run', 'After school', 'Evenings', 'Occasional weekends'],
       },
     ],
   },
   {
-    title: 'Core childcare duties',
+    title: 'Duties',
+    sub: 'Select all that apply.',
     fields: [
       {
         key: 'coreDuties',
-        label: 'Duties',
+        label: 'Core childcare duties',
         type: 'chipMulti',
         options: [
           'School drop-off / pick-up',
@@ -545,14 +472,9 @@ export const FAM_STEPS: Step[] = [
           'Light babysitting in evenings',
         ],
       },
-    ],
-  },
-  {
-    title: 'Household duties',
-    fields: [
       {
         key: 'houseDuties',
-        label: 'Duties',
+        label: 'Household duties',
         type: 'chipMulti',
         options: [
           "Children's laundry",
@@ -582,23 +504,19 @@ export const FAM_STEPS: Step[] = [
         key: 'benefits',
         label: 'Benefits offered',
         type: 'chipMulti',
-        options: ['Private room', 'Own bathroom', 'Language course contribution', 'Travel card', 'Use of a car'],
+        options: [
+          'Private room',
+          'Self-contained annex / studio',
+          'Own bathroom',
+          'Language course contribution',
+          'Travel card',
+          'Use of a car',
+        ],
       },
     ],
   },
   {
-    title: 'Accommodation',
-    fields: [
-      {
-        key: 'accommodation',
-        label: 'Accommodation',
-        type: 'chipSingle',
-        options: ['Private room', 'Shared room', 'Self-contained annex / studio'],
-      },
-    ],
-  },
-  {
-    title: 'Driving',
+    title: 'Driving & language',
     fields: [
       {
         key: 'drivingReq',
@@ -606,11 +524,6 @@ export const FAM_STEPS: Step[] = [
         type: 'chipSingle',
         options: ['Must be a confident driver', 'Driver preferred but not essential', "Don't mind either way"],
       },
-    ],
-  },
-  {
-    title: 'Language',
-    fields: [
       {
         key: 'languageReq',
         label: 'English level needed',

@@ -11,6 +11,7 @@ import { SelectField } from './SelectField';
 import { DateField } from './DateField';
 import { RangeSlider } from './RangeSlider';
 import { ChildListField } from './ChildListField';
+import { PhotoField } from './PhotoField';
 
 type WizardData = Record<string, any>;
 type LangItem = { l: string; lvl: string | null; custom?: string };
@@ -246,6 +247,14 @@ export function FieldBlock({
         </View>
       );
     }
+
+    case 'photo':
+      return (
+        <View style={styles.block}>
+          <FieldLabel label={field.label} required={field.required} />
+          <PhotoField value={val} onChange={(uri) => setField(field.key, uri)} />
+        </View>
+      );
 
     case 'childList': {
       const kids: { name: string; age: string }[] = data.children || [];
