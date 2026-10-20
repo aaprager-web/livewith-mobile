@@ -1,26 +1,37 @@
-import { useEffect, useRef, useState } from 'react';
-import { PanResponder, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { Brand } from '@/constants/brand';
 import type { StepField } from '@/lib/wizardSteps';
 import { formatRangeEndpoint as formatEndpoint } from '@/lib/wizardHelpers';
 
+/* eslint-disable react-hooks/refs, react-hooks/immutability --
+   These two rules assume plain React state and refs. This file uses
+   react-native-reanimated shared values and react-native-gesture-handler
+   worklets instead: mutating a SharedValue's `.value` from a gesture
+   callback (which runs on the UI thread, not during render) is the
+   documented, correct way to use both libraries, not the render-time ref
+   misuse these rules are meant to catch. */
+
 const THUMB = 24;
 
+// Pure math, no React Native involved, so this is safe to call from plain
+// JS (for the text labels) and to inline directly inside a worklet (for the
+// gesture handlers) without needing its own 'worklet' directive.
 function snap(raw: number, lo: number, hi: number, step: number): number {
   const stepped = Math.round((raw - lo) / step) * step + lo;
   return Math.max(lo, Math.min(hi, stepped));
 }
 
-// Pure React Native (PanResponder + core Views), no native slider package,
-// so this keeps working in Expo Go. Mirrors the website's two-stacked-range-
-// inputs trick: two independently draggable thumbs over one track, each
-// clamped so it can't cross the other.
-//
-// curMin/curMax are mirrored into local state (minVal/maxVal) that the drag
-// handlers update directly, so every pixel of movement only re-renders this
-// small component. The parent's onChangeMin/onChangeMax (which triggers a
-// much bigger re-render of the whole wizard step) only fires once the
-// gesture ends — dragging felt janky when it fired on every move instead.
+// Driven entirely by react-native-reanimated + react-native-gesture-handler
+// (both already in the project, both included in Expo Go): the thumbs and
+// the fill bar are animated on the UI thread via shared values, so they
+// track a finger in real time regardless of what the JS thread is doing —
+// an earlier PanResponder + setState version visibly stuttered because
+// every pixel of drag re-rendered React state. Also reports the live value
+// to the parent on every update (not just on release), since decoupling the
+// animation from React state means that no longer costs smoothness.
 export function RangeSlider({
   field,
   curMin,
@@ -37,99 +48,118 @@ export function RangeSlider({
   const lo = field.min ?? 0;
   const hi = field.max ?? 60;
   const step = field.step ?? 5;
-  const [trackWidth, setTrackWidth] = useState(0);
-  const trackWidthRef = useRef(0);
-  const dragStart = useRef(0);
-  const dragging = useRef<'min' | 'max' | null>(null);
 
+  const [trackWidth, setTrackWidth] = useState(0);
   const [minVal, setMinVal] = useState(curMin);
   const [maxVal, setMaxVal] = useState(curMax);
-  const minValRef = useRef(curMin);
-  const maxValRef = useRef(curMax);
+  const draggingMin = useRef(false);
+  const draggingMax = useRef(false);
+  const lastMinReported = useRef(curMin);
+  const lastMaxReported = useRef(curMax);
 
-  // Stay in sync with the parent's value (e.g. navigating back into this
-  // step), but never fight the user mid-drag.
+  const minX = useSharedValue(0);
+  const maxX = useSharedValue(0);
+  const minStartX = useSharedValue(0);
+  const maxStartX = useSharedValue(0);
+
+  function xForValue(v: number, width: number): number {
+    return ((v - lo) / (hi - lo)) * width;
+  }
+
+  // Keep the shared (native-thread) positions in sync with the parent's
+  // value and with layout, but never fight a gesture that's in progress.
   useEffect(() => {
-    if (dragging.current) return;
-    setMinVal(curMin);
-    minValRef.current = curMin;
-  }, [curMin]);
-  useEffect(() => {
-    if (dragging.current) return;
-    setMaxVal(curMax);
-    maxValRef.current = curMax;
-  }, [curMax]);
+    if (trackWidth <= 0) return;
+    if (!draggingMin.current) minX.value = xForValue(curMin, trackWidth);
+    if (!draggingMax.current) maxX.value = xForValue(curMax, trackWidth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackWidth, curMin, curMax]);
 
   function onLayout(e: LayoutChangeEvent) {
-    const w = e.nativeEvent.layout.width - THUMB;
-    trackWidthRef.current = w;
-    setTrackWidth(w);
+    setTrackWidth(e.nativeEvent.layout.width - THUMB);
   }
 
-  function valueAtX(x: number): number {
-    const w = trackWidthRef.current || 1;
-    const pct = Math.max(0, Math.min(1, x / w));
-    return snap(lo + pct * (hi - lo), lo, hi, step);
+  const reportMin = useCallback(
+    (v: number) => {
+      setMinVal(v);
+      if (v !== lastMinReported.current) {
+        lastMinReported.current = v;
+        onChangeMin(v);
+      }
+    },
+    [onChangeMin]
+  );
+  const reportMax = useCallback(
+    (v: number) => {
+      setMaxVal(v);
+      if (v !== lastMaxReported.current) {
+        lastMaxReported.current = v;
+        onChangeMax(v);
+      }
+    },
+    [onChangeMax]
+  );
+
+  function beginDragMin() {
+    draggingMin.current = true;
+  }
+  function endDragMin() {
+    draggingMin.current = false;
+  }
+  function beginDragMax() {
+    draggingMax.current = true;
+  }
+  function endDragMax() {
+    draggingMax.current = false;
   }
 
-  function xForValue(v: number): number {
-    return ((v - lo) / (hi - lo)) * trackWidth;
-  }
+  // Gestures are rebuilt every render (cheap) rather than memoized, so they
+  // always close over the current trackWidth/maxX instead of stale ones —
+  // same reasoning as PanResponder being recreated every render before.
+  const minGesture = Gesture.Pan()
+    .onStart(() => {
+      minStartX.value = minX.value;
+      runOnJS(beginDragMin)();
+    })
+    .onUpdate((e) => {
+      const next = Math.min(Math.max(minStartX.value + e.translationX, 0), maxX.value);
+      minX.value = next;
+      const pct = trackWidth > 0 ? next / trackWidth : 0;
+      const stepped = snap(lo + pct * (hi - lo), lo, hi, step);
+      runOnJS(reportMin)(stepped);
+    })
+    .onEnd(() => {
+      runOnJS(endDragMin)();
+    });
 
-  function startDrag(end: 'min' | 'max') {
-    dragging.current = end;
-    dragStart.current = xForValue(end === 'min' ? minValRef.current : maxValRef.current);
-  }
+  const maxGesture = Gesture.Pan()
+    .onStart(() => {
+      maxStartX.value = maxX.value;
+      runOnJS(beginDragMax)();
+    })
+    .onUpdate((e) => {
+      const next = Math.max(Math.min(maxStartX.value + e.translationX, trackWidth), minX.value);
+      maxX.value = next;
+      const pct = trackWidth > 0 ? next / trackWidth : 0;
+      const stepped = snap(lo + pct * (hi - lo), lo, hi, step);
+      runOnJS(reportMax)(stepped);
+    })
+    .onEnd(() => {
+      runOnJS(endDragMax)();
+    });
 
-  function moveDrag(end: 'min' | 'max', dx: number) {
-    const next = valueAtX(dragStart.current + dx);
-    if (end === 'min') {
-      const clamped = Math.min(next, maxValRef.current);
-      minValRef.current = clamped;
-      setMinVal(clamped);
-    } else {
-      const clamped = Math.max(next, minValRef.current);
-      maxValRef.current = clamped;
-      setMaxVal(clamped);
-    }
-  }
-
-  function endDrag(end: 'min' | 'max') {
-    dragging.current = null;
-    if (end === 'min') onChangeMin(minValRef.current);
-    else onChangeMax(maxValRef.current);
-  }
-
-  // Recreated every render (cheap: a plain object of callbacks) rather than
-  // stashed once in a ref, so each handler always closes over the current
-  // trackWidth instead of whatever it was on first render.
-  //
-  // react-hooks/refs flags this because startDrag/moveDrag/endDrag touch a
-  // ref and get handed to PanResponder.create during render — but
-  // PanResponder (an RN API that predates hooks) only *stores* these
-  // callbacks here and calls them later, from real gesture events, never
-  // during render itself.
-  // eslint-disable-next-line react-hooks/refs
-  const minResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => startDrag('min'),
-    onPanResponderMove: (_e, gesture) => moveDrag('min', gesture.dx),
-    onPanResponderRelease: () => endDrag('min'),
-    onPanResponderTerminate: () => endDrag('min'),
-  });
-
-  // eslint-disable-next-line react-hooks/refs
-  const maxResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => startDrag('max'),
-    onPanResponderMove: (_e, gesture) => moveDrag('max', gesture.dx),
-    onPanResponderRelease: () => endDrag('max'),
-    onPanResponderTerminate: () => endDrag('max'),
-  });
-
-  const minX = xForValue(minVal);
-  const maxX = xForValue(maxVal);
-  const minOnTop = minX > trackWidth / 2;
+  const minThumbStyle = useAnimatedStyle(() => ({
+    left: minX.value,
+    zIndex: minX.value > maxX.value / 2 ? 1 : 2,
+  }));
+  const maxThumbStyle = useAnimatedStyle(() => ({
+    left: maxX.value,
+    zIndex: minX.value > maxX.value / 2 ? 2 : 1,
+  }));
+  const fillStyle = useAnimatedStyle(() => ({
+    left: minX.value + THUMB / 2,
+    width: Math.max(0, maxX.value - minX.value),
+  }));
 
   return (
     <View>
@@ -141,17 +171,13 @@ export function RangeSlider({
         <View style={styles.trackBg} />
         {trackWidth > 0 && (
           <>
-            <View style={[styles.trackFill, { left: minX + THUMB / 2, width: Math.max(0, maxX - minX) }]} />
-            <View
-              {...minResponder.panHandlers}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              style={[styles.thumb, { left: minX, zIndex: minOnTop ? 1 : 2 }]}
-            />
-            <View
-              {...maxResponder.panHandlers}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              style={[styles.thumb, { left: maxX, zIndex: minOnTop ? 2 : 1 }]}
-            />
+            <Animated.View style={[styles.trackFill, fillStyle]} />
+            <GestureDetector gesture={minGesture}>
+              <Animated.View hitSlop={12} style={[styles.thumb, minThumbStyle]} />
+            </GestureDetector>
+            <GestureDetector gesture={maxGesture}>
+              <Animated.View hitSlop={12} style={[styles.thumb, maxThumbStyle]} />
+            </GestureDetector>
           </>
         )}
       </View>
